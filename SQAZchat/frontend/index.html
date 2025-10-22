@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SQAZchat</title>
+<style>
+body {margin:0;font-family:'Segoe UI',sans-serif;display:flex;height:100vh;background:#1f1f2e;color:#fff;transition:.3s;}
+body.light{background:#f5f3ff;color:#1e1e1e;}
+.sidebar{width:250px;background:#2b2b3b;display:flex;flex-direction:column;padding:20px;box-shadow:2px 0 8px rgba(0,0,0,.5);}
+body.light .sidebar{background:#ede9fe;}
+.logo{font-size:22px;font-weight:bold;color:#6d40f3;margin-bottom:20px;text-align:center;}
+.nav-btn{background:#6d40f3;color:#fff;border:none;border-radius:10px;padding:10px;margin:5px 0;cursor:pointer;font-weight:600;text-align:left;transition:.3s;}
+.nav-btn:hover{opacity:.9;transform:scale(1.03);}
+body.light .nav-btn{background:#7c3aed;color:#fff;}
+.theme-toggle{margin-top:auto;background:transparent;color:#6d40f3;border:2px solid #6d40f3;border-radius:10px;padding:8px;cursor:pointer;font-weight:bold;transition:.3s;}
+.theme-toggle:hover{background:#6d40f3;color:#fff;}
+.chat{flex:1;display:flex;flex-direction:column;padding:20px;background:#1f1f2e;}
+body.light .chat{background:#fff;}
+.messages{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding-right:10px;}
+.msg{padding:10px 15px;border-radius:15px;max-width:80%;line-height:1.4;position:relative;}
+.user{align-self:flex-end;background:#6d40f3;color:#fff;}
+.bot{align-self:flex-start;background:#4b4b6a;color:#fff;}
+body.light .bot{background:#ececec;color:#1e1e1e;}
+body.light .user{background:#7c3aed;color:#fff;}
+.input-area{display:flex;gap:10px;margin-top:15px;}
+input{flex:1;padding:10px;border-radius:10px;border:none;outline:none;font-size:15px;background:#2b2b3b;color:#fff;}
+body.light input{background:#ede9fe;color:#1e1e1e;}
+button.send{background:#6d40f3;color:#fff;border:none;border-radius:10px;padding:10px 20px;cursor:pointer;font-weight:bold;transition:.3s;}
+button.send:hover{opacity:.9;transform:scale(1.03);}
+.media-preview{margin-top:10px;border-radius:10px;overflow:hidden;max-width:400px;}
+.media-preview img,.media-preview video{width:100%;border-radius:10px;}
+.download-btn{position:absolute;bottom:-25px;right:10px;background:#6d40f3;color:#fff;border:none;padding:4px 8px;border-radius:6px;font-size:12px;cursor:pointer;transition:.3s;}
+.download-btn:hover{background:#834fff;}
+</style>
+</head>
+<body>
+<div class="sidebar">
+  <div class="logo">SQAZchat</div>
+  <button class="nav-btn" onclick="selectMode('chat')">💬 Чат</button>
+  <button class="nav-btn" onclick="selectMode('math')">🧮 Математика</button>
+  <button class="nav-btn" onclick="selectMode('image')">🖼️ Генерация фото</button>
+  <button class="nav-btn" onclick="selectMode('video')">🎥 Генерация видео</button>
+  <button class="theme-toggle" onclick="toggleTheme()">🌗 Тема</button>
+</div>
+<div class="chat">
+  <div class="messages" id="messages"></div>
+  <div class="input-area">
+    <input type="text" id="userInput" placeholder="Введите сообщение или описание..." />
+    <button class="send" onclick="sendMessage()">Отправить</button>
+  </div>
+</div>
+
+<script>
+let mode="chat";
+function selectMode(newMode){
+  mode=newMode;
+  document.getElementById("messages").innerHTML="";
+  addBot(`Режим: ${mode}`);
+}
+async function sendMessage(){
+  const input=document.getElementById("userInput");
+  const text=input.value.trim();
+  if(!text)return;
+  addUser(text);
+  input.value="";
+  if(mode==="chat"){
+    try{
+      const res=await fetch("/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:text})});
+      const data=await res.json();
+      addBot(data.reply);
+    }catch(e){addBot("Ошибка соединения с сервером");}
+  }
+  else if(mode==="math"){
+    try{const result=eval(text);addBot("Ответ: "+result);}catch{addBot("Ошибка вычисления 😅");}
+  }
+  else if(mode==="image"){
+    try{
+      const res=await fetch("/generate-image",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt:text})});
+      const data=await res.json();
+      if(data.image){
+        const container=addBot("Сгенерировано изображение 🖼️");
+        const img=document.createElement("img");
+        img.src=data.image;
+        container.appendChild(img);
+        addDownload(container, data.image, "image.png");
+      }else{addBot("Ошибка генерации: "+(data.error||""));}
+    }catch(e){addBot("Ошибка сервера");}
+  }
+  else if(mode==="video"){
+    try{
+      const res=await fetch("/generate-video",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt:text})});
+      const data=await res.json();
+      if(data.video){
+        const container=addBot("Сгенерировано видео 🎥");
+        const vid=document.createElement("video");
+        vid.controls=true;
+        vid.src=data.video;
+        container.appendChild(vid);
+        addDownload(container, data.video, "video.mp4");
+      }else{addBot("Ошибка генерации: "+(data.error||""));}
+    }catch(e){addBot("Ошибка сервера");}
+  }
+}
+
+function addUser(text){
+  const msg=document.createElement("div");
+  msg.className="msg user";
+  msg.textContent=text;
+  document.getElementById("messages").appendChild(msg);
+  scrollToBottom();
+}
+
+function addBot(text){
+  const msg=document.createElement("div");
+  msg.className="msg bot";
+  const span=document.createElement("div");
+  span.textContent=text;
+  msg.appendChild(span);
+  document.getElementById("messages").appendChild(msg);
+  scrollToBottom();
+  return msg;
+}
+
+function addDownload(container, dataUrl, filename){
+  const btn=document.createElement("button");
+  btn.className="download-btn";
+  btn.textContent="💾 Скачать";
+  btn.onclick=()=>{const a=document.createElement("a");a.href=dataUrl;a.download=filename;a.click();}
+  container.appendChild(btn);
+}
+
+function scrollToBottom(){
+  const messages=document.getElementById("messages");
+  messages.scrollTop=messages.scrollHeight;
+}
+
+function toggleTheme(){
+  document.body.classList.toggle("light");
+}
+
+addBot("Добро пожаловать в SQAZchat 💬");
+</script>
+</body>
+</html>
